@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 
 namespace SymfonyIdeIntegration;
@@ -20,6 +22,7 @@ internal sealed class TrayApplication : ApplicationContext
         phpStormItem.Click += (_, _) => Save(settings with { Editor = Editor.PhpStorm });
         menu.Items.AddRange([vsCodeItem, phpStormItem, new ToolStripSeparator(),
             new ToolStripMenuItem("Settings…", null, (_, _) => OpenSettings()),
+            new ToolStripMenuItem("Logs", null, (_, _) => OpenLogs()),
             new ToolStripMenuItem("About…", null, (_, _) => ShowAbout()),
             new ToolStripMenuItem("Exit", null, (_, _) => ExitThread())]);
         trayIcon = new NotifyIcon
@@ -45,6 +48,29 @@ internal sealed class TrayApplication : ApplicationContext
         trayIcon.Icon = updatedIcon;
         currentIcon?.Dispose();
         currentIcon = updatedIcon;
+    }
+
+    private static void OpenLogs()
+    {
+        const string title = "Symfony IDE Integration";
+        string path = IntegrationLog.FilePath;
+        if (!File.Exists(path))
+        {
+            MessageBox.Show("No logs are available yet.", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var startInfo = new ProcessStartInfo("notepad.exe") { UseShellExecute = false };
+        startInfo.ArgumentList.Add(path);
+        try
+        {
+            using var notepad = Process.Start(startInfo);
+        }
+        catch (Win32Exception)
+        {
+            MessageBox.Show($"Could not open the log file in Notepad.\n\n{path}",
+                title, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private static void ShowAbout()

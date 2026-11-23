@@ -32,6 +32,9 @@ On Windows x64 with the .NET 10 SDK and Inno Setup 6.3 or later, run this in Pow
 The script builds the next version according to [SemVer](https://semver.org/). By default, it increments `PATCH` after every successful installer build, including builds of unchanged code. Use `-Bump Minor` for backward-compatible features and `-Bump Major` for breaking changes. The script writes the new version to `VERSION` after creating the installer. Include the `VERSION` change in the release commit.
 
 The installer is created at `artifacts\SymfonyIdeIntegration-<version>-Setup-x64.exe`. Previous packages remain in this directory. If you use a portable SDK or a custom Inno Setup location, provide paths with the `-DotNet` and `-InnoSetupCompiler` parameters. The package includes the .NET runtime required to run the application.
+```ps
+.\build-installer.ps1 -DotNet "artifacts\tools\dotnet\dotnet.exe" -InnoSetupCompiler "artifacts\tools\inno\ISCC.exe"
+```
 
 To build only the application using the version in `VERSION`, run `dotnet build .\src\SymfonyIdeIntegration\SymfonyIdeIntegration.csproj`.
 

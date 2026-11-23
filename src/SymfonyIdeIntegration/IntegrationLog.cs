@@ -8,11 +8,12 @@ internal static class IntegrationLog
     private const int MaxBytes = 1024 * 1024;
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
+    internal static string FilePath => Path.Combine(UserSettings.DataDirectory, "integration.log");
+
     internal static void Update(string? message = null)
     {
         try
         {
-            string path = Path.Combine(UserSettings.DataDirectory, "integration.log");
             using var mutex = new Mutex(false, "Q3a-Symfony2ide.Log");
             try
             {
@@ -26,7 +27,7 @@ internal static class IntegrationLog
 
             try
             {
-                RetainEntries(path, DateTimeOffset.UtcNow, message);
+                RetainEntries(FilePath, DateTimeOffset.UtcNow, message);
             }
             finally
             {

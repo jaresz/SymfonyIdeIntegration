@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace SymfonyIdeIntegration;
 
 internal sealed class AboutDialog : Form
@@ -33,11 +35,7 @@ internal sealed class AboutDialog : Form
         };
         var authorStart = credit.Text.IndexOf(author, StringComparison.Ordinal);
         credit.Links.Add(authorStart, author.Length, authorUrl);
-        credit.LinkClicked += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = authorUrl,
-            UseShellExecute = true
-        });
+        credit.LinkClicked += OpenLink;
         const string licenseUrl = "https://www.gnu.org/licenses/gpl-3.0.html";
         const string licenseName = "GNU GPL version 3";
         var terms = new LinkLabel
@@ -49,11 +47,16 @@ internal sealed class AboutDialog : Form
         };
         var licenseStart = terms.Text.IndexOf(licenseName, StringComparison.Ordinal);
         terms.Links.Add(licenseStart, licenseName.Length, licenseUrl);
-        terms.LinkClicked += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        terms.LinkClicked += OpenLink;
+        const string repositoryUrl = "https://github.com/jaresz/SymfonyIdeIntegration";
+        var source = new LinkLabel
         {
-            FileName = licenseUrl,
-            UseShellExecute = true
-        });
+            Text = "Source code on GitHub", AutoSize = true,
+            LinkColor = terms.LinkColor, ActiveLinkColor = terms.ActiveLinkColor,
+            VisitedLinkColor = terms.VisitedLinkColor, Location = new(26, 109)
+        };
+        source.Links.Add(0, source.Text.Length, repositoryUrl);
+        source.LinkClicked += OpenLink;
         var close = new Button
         {
             Text = "Close", DialogResult = DialogResult.Cancel, Size = new(84, 32),
@@ -61,8 +64,16 @@ internal sealed class AboutDialog : Form
         };
         close.FlatAppearance.BorderColor = Color.FromArgb(85, 112, 133);
         CancelButton = close;
-        footer.Controls.AddRange([title, credit, terms, close]);
+        footer.Controls.AddRange([title, credit, terms, source, close]);
         Controls.Add(scene);
         Controls.Add(footer);
+    }
+
+    private static void OpenLink(object? sender, LinkLabelLinkClickedEventArgs e)
+    {
+        if (e.Link?.LinkData is string url)
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
     }
 }
