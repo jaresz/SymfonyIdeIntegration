@@ -8,7 +8,7 @@ internal static class EditorLauncher
     internal static void Open(string url)
     {
         var settings = UserSettings.Load(out _);
-        var link = EditorLink.Resolve(url, settings);
+        var link = EditorLink.Resolve(url);
         var command = CreateCommand(link, settings);
         using var process = Process.Start(command);
         IntegrationLog.Update($"Editor launch requested: {settings.Editor}");
@@ -17,6 +17,9 @@ internal static class EditorLauncher
     internal static ProcessStartInfo CreateCommand(EditorLink link, UserSettings settings)
     {
         bool useCode = settings.Editor == Editor.VsCode;
+        if (link.SshHost is not null && !useCode)
+            throw new IntegrationException("Select Visual Studio Code in the tray menu to open an SSH project.");
+
         string path = EditorDiscovery.ResolveExecutable(settings) ??
             throw new IntegrationException($"Choose an existing {EditorDiscovery.ExecutableName(settings.Editor)} file in Settings.");
 
@@ -26,11 +29,13 @@ internal static class EditorLauncher
         string? line = link.Line?.ToString(CultureInfo.InvariantCulture);
         if (useCode)
         {
-            if (link.Distribution is { } distro)
+            string? remote = link.SshHost is { } host ? $"ssh-remote+{host}" :
+                link.Distribution is { } distro ? $"wsl+{distro}" : null;
+            if (remote is not null)
             {
-                string remote = $"wsl+{distro}";
+                string authority = link.Distribution is { } distribution ? $"wsl+{Uri.EscapeDataString(distribution)}" : remote;
                 string folder = string.Join('/', directory.Split('/').Select(Uri.EscapeDataString));
-                AddArguments(command, "--remote", remote, "--folder-uri", $"vscode-remote://wsl+{Uri.EscapeDataString(distro)}{folder}");
+                AddArguments(command, "--remote", remote, "--folder-uri", $"vscode-remote://{authority}{folder}");
             }
             else
             {

@@ -4,7 +4,7 @@ This guide explains where to find the Symfony IDE Integration code, how a Symfon
 
 ## What the application does
 
-Symfony can include a link to a file and line of code in its configuration. When clicked, Windows starts this application with a `Q3a-Symfony2ide://...` address. The application reads its settings, resolves the project location (a local Windows directory or a WSL directory), finds the selected editor, and passes it the file path and line number. The application runs mainly in the system tray, where users can choose an editor and configure settings.
+Symfony can include a link to a file and line of code in its configuration. When clicked, Windows starts this application with a `Q3a-Symfony2ide://...` address. The application resolves the project location from the link, finds the editor selected in its settings, and passes it the file path and line number. Projects can be in a local Windows directory, in a WSL distribution, or on an SSH host. The application runs mainly in the system tray, where users can choose an editor and configure settings.
 
 ## Repository map
 
@@ -29,7 +29,7 @@ The easiest way to follow the code is in the order a link is handled:
 
 1. `Program.cs` is the application entry point. The `--open` argument means the app was launched through a protocol link; with no arguments, it starts the tray app. This file also handles unexpected errors and shows a message to the user.
 2. `EditorLauncher.cs` loads settings, asks another component to interpret the address, and prepares process arguments for VS Code or PhpStorm. `ProcessStartInfo.ArgumentList` passes arguments separately instead of assembling a command line manually.
-3. `EditorLink.cs` checks the link syntax, line number, and parameters, then resolves the project and file paths. It handles WSL and local Windows projects separately; for a local link, it can find the `.idea` directory.
+3. `EditorLink.cs` checks the link syntax, line number, and parameters, then resolves the project and file paths. The `connect_to` parameter selects WSL or SSH. For a local Windows link, the application can find the `.idea` directory.
 4. `EditorDiscovery.cs` finds the editor executable using the configured path, the `PATH` environment variable, or common Windows installation directories.
 5. `UserSettings.cs` reads and writes `settings.json` in `%LOCALAPPDATA%\SymfonyIdeIntegration`. A C# `record` is a type for holding data, and `System.Text.Json` converts the settings object to and from JSON text.
 6. `IntegrationLog.cs` records events and errors in `integration.log` in the same data directory. The log is periodically cleaned up; `README.md` describes its retention period and size limit.
@@ -39,7 +39,7 @@ User interface and supporting files:
 | File | Purpose |
 |---|---|
 | `TrayApplication.cs` | Creates the tray menu, switches editors, opens settings and About windows, refreshes the icon, and schedules periodic log cleanup. |
-| `SettingsDialog.cs` | Settings window for the WSL directory and distribution, editor paths, and validation before saving. |
+| `SettingsDialog.cs` | Settings window for selecting editor paths and validating them before saving. |
 | `AboutDialog.cs` | Window showing the application name, version, and illustrated scene. |
 | `BridgeScene.cs` | Draws and animates the illustration in the About window using .NET graphics APIs; plays the embedded theme audio. |
 | `PilotArm.cs` | Helper renderer for the character's arm in the animation. It uses the forearm bitmap, a pixel buffer, and a simple depth buffer to draw the bent arm correctly. |

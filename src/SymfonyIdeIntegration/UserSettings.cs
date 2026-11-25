@@ -25,8 +25,6 @@ internal sealed record UserSettings
     private static string SettingsPath => Path.Combine(DataDirectory, "settings.json");
 
     public Editor Editor { get; init; } = Editor.VsCode;
-    public string WslProjectsRoot { get; init; } = "";
-    public string WslDistribution { get; init; } = "Ubuntu";
     public string VsCodePath { get; init; } = "";
     public string PhpStormPath { get; init; } = "";
 

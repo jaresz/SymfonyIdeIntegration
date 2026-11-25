@@ -5,11 +5,12 @@ using Microsoft.Win32.SafeHandles;
 
 namespace SymfonyIdeIntegration;
 
-internal sealed record EditorLink(string ProjectDirectory, string FilePath, int? Line, string? Distribution = null)
+internal sealed record EditorLink(
+    string ProjectDirectory, string FilePath, int? Line, string? Distribution = null, string? SshHost = null)
 {
     internal const string Scheme = "Q3a-Symfony2ide";
 
-    internal static EditorLink Resolve(string url, UserSettings settings)
+    internal static EditorLink Resolve(string url)
     {
         int queryStart = url.IndexOf('?');
         if (queryStart < 0 ||
@@ -33,42 +34,68 @@ internal sealed record EditorLink(string ProjectDirectory, string FilePath, int?
             line = number;
         }
 
-        string? project = parameters.GetValueOrDefault("project");
         string? file = parameters.GetValueOrDefault("file");
-        return string.IsNullOrEmpty(project)
-            ? ResolveLocal(parameters, file, line)
-            : ResolveWsl(settings, project, file, line);
+        if (!parameters.TryGetValue("connect_to", out string? connection))
+        {
+            if (!string.IsNullOrEmpty(parameters.GetValueOrDefault("project")) ||
+                parameters.ContainsKey("sshHost") || parameters.ContainsKey("ssh_host") ||
+                parameters.ContainsKey("project_path"))
+                throw new IntegrationException(
+                    "Update the remote link to use 'connect_to=WSL' with 'dist' or 'connect_to=SSH' with 'ssh_host'. " +
+                    "Set 'project_path' to the full project directory.");
+            return ResolveLocal(parameters, file, line);
+        }
+
+        bool isWsl = connection.Equals("WSL", StringComparison.OrdinalIgnoreCase);
+        if (!isWsl && !connection.Equals("SSH", StringComparison.OrdinalIgnoreCase))
+            throw new IntegrationException("The 'connect_to' parameter must be WSL or SSH.");
+
+        string? directory = parameters.GetValueOrDefault("project_path");
+        if (directory is null || !IsAbsoluteLinuxDirectory(directory))
+            throw new IntegrationException("The 'project_path' parameter must be an absolute Linux directory.");
+        directory = directory == "/" ? directory : directory.TrimEnd('/');
+
+        return isWsl
+            ? ResolveWsl(parameters.GetValueOrDefault("dist"), directory, file, line)
+            : ResolveSsh(parameters.GetValueOrDefault("ssh_host"), directory, file, line);
     }
 
-    private static EditorLink ResolveWsl(UserSettings settings, string project, string? file, int? line)
+    private static EditorLink ResolveSsh(string? host, string directory, string? file, int? line)
     {
-        if (!IsWslSegment(project))
-            throw new IntegrationException("The 'project' parameter must be a single WSL directory name.");
+        if (string.IsNullOrEmpty(host) || !char.IsAsciiLetterOrDigit(host[0]) ||
+            !host.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_'))
+            throw new IntegrationException("The 'ssh_host' parameter must be an SSH host alias, such as symfony-dev.");
 
-        string root = settings.WslProjectsRoot.TrimEnd('/');
-        if (!IsWslRoot(settings.WslProjectsRoot))
-            throw new IntegrationException("In Settings, enter an absolute path for the WSL projects directory, such as /home/username/projects.");
-        if (!IsDistribution(settings.WslDistribution))
-            throw new IntegrationException("In Settings, enter a valid WSL distribution name, such as Ubuntu.");
+        string prefix = directory.TrimEnd('/') + '/';
+        if (file is null || !file.StartsWith(prefix, StringComparison.Ordinal) ||
+            !file[prefix.Length..].Split('/').All(IsLinuxPathSegment) || file.Contains(':'))
+            throw new IntegrationException("The 'file' parameter must point to a file inside the SSH project directory and cannot contain a colon.");
+
+        return new(directory, file, line, SshHost: host);
+    }
+
+    private static EditorLink ResolveWsl(string? distribution, string directory, string? file, int? line)
+    {
+        if (distribution is null || !IsDistribution(distribution))
+            throw new IntegrationException("The 'dist' parameter must be a valid WSL distribution name, such as Ubuntu.");
 
         const string containerRoot = "/var/www/html/";
         if (file is null || !file.StartsWith(containerRoot, StringComparison.Ordinal) ||
-            !file[containerRoot.Length..].Split('/').All(IsWslSegment))
+            !file[containerRoot.Length..].Split('/').All(IsLinuxPathSegment))
             throw new IntegrationException("The 'file' parameter must point to a file inside /var/www/html.");
 
-        string directory = $"{root}/{project}";
-        return new(directory, $"{directory}/{file[containerRoot.Length..]}", line, settings.WslDistribution);
+        return new(directory, $"{directory.TrimEnd('/')}/{file[containerRoot.Length..]}", line, distribution);
     }
 
-    internal static bool IsWslRoot(string root) =>
+    private static bool IsAbsoluteLinuxDirectory(string root) =>
         root == "/" || (root.StartsWith('/') && root.TrimEnd('/') is { Length: > 1 } trimmed &&
-            trimmed[1..].Split('/').All(IsWslSegment));
+            trimmed[1..].Split('/').All(IsLinuxPathSegment));
 
-    internal static bool IsDistribution(string value) =>
-        IsWslSegment(value) && value.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
+    private static bool IsDistribution(string value) =>
+        IsLinuxPathSegment(value) && value.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
         !value.EndsWith(' ') && !value.EndsWith('.');
 
-    private static bool IsWslSegment(string value) =>
+    private static bool IsLinuxPathSegment(string value) =>
         value.Length > 0 && value is not "." and not ".." &&
         !value.Contains('/') && !value.Contains('\\') && !value.Any(char.IsControl);
 

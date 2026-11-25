@@ -23,11 +23,8 @@ internal sealed class SettingsDialog : Form
         };
         Controls.Add(layout);
 
-        TextBox root = AddField(layout, 0, "WSL projects directory", settings.WslProjectsRoot);
-        root.PlaceholderText = "/home/username/projects";
-        TextBox distro = AddField(layout, 1, "WSL distribution", settings.WslDistribution);
-        TextBox code = AddEditorField(layout, 2, "Visual Studio Code", settings.VsCodePath, Editor.VsCode);
-        TextBox phpStorm = AddEditorField(layout, 3, "PhpStorm", settings.PhpStormPath, Editor.PhpStorm);
+        TextBox code = AddEditorField(layout, 0, "Visual Studio Code", settings.VsCodePath, Editor.VsCode);
+        TextBox phpStorm = AddEditorField(layout, 1, "PhpStorm", settings.PhpStormPath, Editor.PhpStorm);
 
         if (settingsDamaged)
         {
@@ -37,7 +34,7 @@ internal sealed class SettingsDialog : Form
                 AutoSize = true,
                 MaximumSize = new Size(490, 0)
             };
-            layout.Controls.Add(notice, 0, 4);
+            layout.Controls.Add(notice, 0, 2);
             layout.SetColumnSpan(notice, 3);
         }
 
@@ -45,30 +42,17 @@ internal sealed class SettingsDialog : Form
         var cancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
         var ok = new Button { Text = "Save", AutoSize = true };
         buttons.Controls.AddRange([cancel, ok]);
-        layout.Controls.Add(buttons, 0, settingsDamaged ? 5 : 4);
+        layout.Controls.Add(buttons, 0, settingsDamaged ? 3 : 2);
         layout.SetColumnSpan(buttons, 3);
         AcceptButton = ok;
         CancelButton = cancel;
 
         ok.Click += (_, _) =>
         {
-            string rootValue = root.Text.Trim();
-            string distroValue = distro.Text.Trim();
-            if (rootValue.Length > 0 && !EditorLink.IsWslRoot(rootValue))
-            {
-                ShowError(root, "Enter an absolute path for the WSL projects directory, such as /home/username/projects.");
-                return;
-            }
-            if (!EditorLink.IsDistribution(distroValue))
-            {
-                ShowError(distro, "Enter a valid WSL distribution name, such as Ubuntu.");
-                return;
-            }
             if (!ValidateEditorPath(code, Editor.VsCode) || !ValidateEditorPath(phpStorm, Editor.PhpStorm))
                 return;
             if (save(settings with
                 {
-                    WslProjectsRoot = rootValue, WslDistribution = distroValue,
                     VsCodePath = code.Text.Trim(), PhpStormPath = phpStorm.Text.Trim()
                 }))
                 DialogResult = DialogResult.OK;
