@@ -1,6 +1,6 @@
 # Symfony IDE Integration
 
-This project opens files referenced by Symfony links in the correct project and at the specified line. The `Q3a-Symfony2ide` protocol supports projects running in Docker on WSL2 (Visual Studio Code or PhpStorm) as well as Linux projects reached through Visual Studio Code Remote - SSH and local Windows copies synchronized with a remote server through PhpStorm.
+This project opens files referenced by Symfony links in the correct project and at the specified line. The `Q3a-Symfony2ide` protocol supports projects running in Docker on WSL2 (Visual Studio Code or PhpStorm), Linux projects accessed through SSH (Visual Studio Code or PhpStorm), and local Windows copies synchronized with a remote server through PhpStorm.
 
 ## License
 
@@ -14,11 +14,15 @@ For an overview of directories, source files, and developer tools, see the [proj
 2. Click the **Symfony IDE Integration** tray icon. Windows may place it in the hidden icons menu. If automatic editor detection does not work, open **Settings…** and use **Browse…** to locate `Code.exe` or `phpstorm64.exe`. Save the settings.
 3. Select **Visual Studio Code** or **PhpStorm** from the tray menu. The icon changes immediately, and the editor selection applies to the next link and persists after closing the menu. If the editor is unavailable, the tray shows a **VS** or **PS** icon. You can launch the tray app again from the Start menu. Find the application version under **About…**.
 
-Uninstall the application from **Settings → Apps → Installed apps**. If it is running, select **Exit** from the tray menu first. The uninstaller removes the `Q3a-Symfony2ide` protocol and startup entry. Settings and `integration.log` remain in `%LOCALAPPDATA%\SymfonyIdeIntegration`.
+The tray menu also lists the visible items in `%APPDATA%\Microsoft\Internet Explorer\Quick Launch` with their Windows Shell icons. Click an item to open it just as you would in File Explorer. The list refreshes whenever the menu is opened.
+
+Uninstall the application from **Settings → Apps → Installed apps**. If it is running, select **Exit** from the tray menu first. The uninstaller removes the `Q3a-Symfony2ide` protocol and startup entry. Settings remain in `%LOCALAPPDATA%\SymfonyIdeIntegration`.
 
 If `settings.json` is damaged, the application starts with default settings. Open **Settings…**, fill in the fields, and select **Save**. The application keeps the damaged file as `settings.corrupt-<identifier>.json` beside the new `settings.json`.
 
-The log records the date, event type, and editor name or error type when applicable. The application removes entries older than 7 days and trims the oldest entries to keep the file under 1 MiB. It checks the log when writing and every minute while the tray app is running.
+Select **Last invocation…** in the tray menu to inspect the most recent Symfony link, its decoded parameters, selected editor, connection type, path mapping, command arguments, and result or error. The window updates automatically and **Copy details** copies the report to the clipboard. A successful editor launch means the request was sent, not necessarily that the editor opened the file; PhpStorm over SSH additionally reports the SSH command's result.
+
+Only the latest invocation is kept in memory while the tray application is running. Closing the tray clears the report, and links still open when the tray is not running, but their reports cannot be viewed later. No new diagnostic files are created. Text logs left by older versions are not automatically removed. Diagnostic details may contain project paths and SSH aliases; review them before sharing.
 
 ### Building the installer
 
@@ -56,14 +60,17 @@ If you used a link with `project=ecp2`, update `framework.ide` to the format abo
 
 ### Projects on a Linux host over SSH
 
-Install the [Remote - SSH extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh), configure an SSH host alias such as `symfony-dev`, and select **Visual Studio Code** in the tray menu. Use the alias from your SSH configuration and the absolute project directory as seen on the SSH host.
+Configure an SSH host alias such as `symfony-dev` and use the absolute project directory as seen on the SSH host.
 
 ```yaml
 framework:
     ide: 'Q3a-Symfony2ide://open/?connect_to=SSH&ssh_host=symfony-dev&project_path=/srv/projects/shop&file=%%f&line=%%l'
 ```
 
-Set `ssh_host` to your SSH alias and `project_path` to the absolute project directory on that host. Symfony supplies the file path directly from the host, such as `/srv/projects/shop/src/Controller/HomeController.php`. Clicking a link opens the remote project folder and the referenced file at its line in VS Code.
+Set `ssh_host` to your SSH alias and `project_path` to the absolute project directory on that host. Symfony supplies the file path directly from the host, such as `/srv/projects/shop/src/Controller/HomeController.php`.
+
+- **Visual Studio Code:** install the [Remote - SSH extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh) and select Visual Studio Code in the tray menu. The link opens the remote project and file at the specified line.
+- **PhpStorm:** first connect to the project through [PhpStorm Remote Development](https://www.jetbrains.com/help/phpstorm/remote-development-overview.html) and select PhpStorm in the tray menu. The Windows OpenSSH Client must be able to connect to the same Linux account using the SSH alias without interactive authentication prompts. The integration sends the file and line to the running PhpStorm backend for that project.
 
 ### Local Windows projects synchronized through PhpStorm
 

@@ -32,13 +32,16 @@ The easiest way to follow the code is in the order a link is handled:
 3. `EditorLink.cs` checks the link syntax, line number, and parameters, then resolves the project and file paths. The `connect_to` parameter selects WSL or SSH. For a local Windows link, the application can find the `.idea` directory.
 4. `EditorDiscovery.cs` finds the editor executable using the configured path, the `PATH` environment variable, or common Windows installation directories.
 5. `UserSettings.cs` reads and writes `settings.json` in `%LOCALAPPDATA%\SymfonyIdeIntegration`. A C# `record` is a type for holding data, and `System.Text.Json` converts the settings object to and from JSON text.
-6. `IntegrationLog.cs` records events and errors in `integration.log` in the same data directory. The log is periodically cleaned up; `README.md` describes its retention period and size limit.
+6. `InvocationReport.cs` captures the link, decoded parameters, resolved paths, launch command, processing stage and result. Because every protocol invocation runs in a separate Windows process, `InvocationChannel.cs` sends snapshots through a local, same-user named pipe to the tray. The tray keeps only the newest invocation in memory, even when an older SSH request finishes later. A missing tray or failed diagnostic transfer does not prevent the editor launch.
 
 User interface and supporting files:
 
 | File | Purpose |
 |---|---|
-| `TrayApplication.cs` | Creates the tray menu, switches editors, opens settings and About windows, refreshes the icon, and schedules periodic log cleanup. |
+| `PhpStormRemoteLauncher.cs` | Uses Windows OpenSSH to locate the running PhpStorm backend for an SSH project and open the file at the requested line. |
+| `TrayApplication.cs` | Creates the tray menu, switches editors, opens settings, last invocation and About windows, and refreshes the icon. |
+| `QuickLaunch.cs` | Reads the current user's Quick Launch folder, retrieves Windows Shell display names and icons, and opens selected items through the Shell. |
+| `LastInvocationDialog.cs` | Shows the newest report in a read-only window that refreshes while open and supports copying the details. |
 | `SettingsDialog.cs` | Settings window for selecting editor paths and validating them before saving. |
 | `AboutDialog.cs` | Window showing the application name, version, and illustrated scene. |
 | `BridgeScene.cs` | Draws and animates the illustration in the About window using .NET graphics APIs; plays the embedded theme audio. |
@@ -74,6 +77,7 @@ This directory holds generated files that are not application source code: insta
 - **MSBuild** is the build engine used by `dotnet build`. It reads `.csproj` settings, resolves dependencies, and writes intermediate output to `obj/` and build output to `bin/`.
 - **Inno Setup 6.3+** (`ISCC.exe`) creates the Windows installer from `installer/SymfonyIdeIntegration.iss`.
 - **Visual Studio Code or PhpStorm** are the editors launched by the finished application. Neither is required to build the integration application itself.
+- **Windows OpenSSH Client** is used to send file-opening requests to an active PhpStorm Remote Development backend.
 - **WSL2** is a Linux environment that runs alongside Windows. For WSL paths, the application opens a remote folder in VS Code or uses the WSL network path in PhpStorm. Docker containers and Symfony belong to the user's project environment; this repository does not build them.
 
 ## Typical build workflow
@@ -85,6 +89,8 @@ dotnet build .\src\SymfonyIdeIntegration\SymfonyIdeIntegration.csproj
 ```
 
 This checks that the C# project builds and writes output to `src/SymfonyIdeIntegration/bin/`. It does not create an installer or change `VERSION`.
+
+Building or directly starting the debug executable does not change the registered Windows protocol handler. To test **Last invocation…** from a browser link, install the current build and run its tray application; otherwise the browser may start an older installed executable that does not send diagnostic reports to the debug tray.
 
 To build the installer, which publishes a self-contained Windows x64 application and increments the version on success:
 
@@ -99,7 +105,7 @@ This requires the .NET 10 SDK and Inno Setup. The output is `artifacts/SymfonyId
 - Link parsing or validation: start with `EditorLink.cs`.
 - Editor launch arguments: `EditorLauncher.cs`; executable discovery: `EditorDiscovery.cs`.
 - Settings or tray menu: `UserSettings.cs`, `SettingsDialog.cs`, and `TrayApplication.cs`.
-- Logging errors: `IntegrationLog.cs` and error handling in `Program.cs`.
+- Last-invocation diagnostics: `InvocationReport.cs`, `InvocationChannel.cs`, `LastInvocationDialog.cs`, and error handling in `Program.cs`.
 - Tray icon or About window: `TrayIcons.cs`, `AboutDialog.cs`, `BridgeScene.cs`, `PilotArm.cs`, and the `Art/` resources.
 - Installer behavior or release versioning: `installer/SymfonyIdeIntegration.iss`, `build-installer.ps1`, and `VERSION`.
 - User instructions and Symfony link format: `README.md`.

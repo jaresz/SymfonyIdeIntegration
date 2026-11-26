@@ -4,10 +4,9 @@ internal static class Program
 {
     private static int ReportError(Exception error)
     {
-        IntegrationLog.Update($"Error: {error.GetType().Name}");
         string message = error is IntegrationException
             ? error.Message
-            : "An unexpected error occurred. See integration.log in %LOCALAPPDATA%\\SymfonyIdeIntegration for details.";
+            : $"An unexpected error occurred.\n\n{error.Message}\n\nOpen Last invocation… from the tray menu for link diagnostics, if available.";
         MessageBox.Show(message, "Symfony IDE Integration", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return 1;
     }
@@ -21,7 +20,26 @@ internal static class Program
         {
             if (args is ["--open", string url])
             {
-                EditorLauncher.Open(url);
+                // Publish even invalid links, and send the final snapshot before
+                // showing an error dialog so it can be inspected immediately.
+                var report = new InvocationReport { Url = url };
+                report.Publish();
+                try
+                {
+                    EditorLauncher.Open(url, report);
+                }
+                catch (Exception error)
+                {
+                    report.Result = "Error";
+                    report.ErrorType = error.GetType().Name;
+                    report.ErrorMessage = error.Message;
+                    throw;
+                }
+                finally
+                {
+                    report.FinishedAt = DateTimeOffset.UtcNow;
+                    report.Publish();
+                }
             }
             else if (args.Length == 0)
             {

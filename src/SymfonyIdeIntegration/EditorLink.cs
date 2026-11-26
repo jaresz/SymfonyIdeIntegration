@@ -10,7 +10,7 @@ internal sealed record EditorLink(
 {
     internal const string Scheme = "Q3a-Symfony2ide";
 
-    internal static EditorLink Resolve(string url)
+    internal static EditorLink Resolve(string url, InvocationReport? report = null)
     {
         int queryStart = url.IndexOf('?');
         if (queryStart < 0 ||
@@ -26,12 +26,28 @@ internal sealed record EditorLink(
                 parameters[pair[..separator]] = Uri.UnescapeDataString(pair[(separator + 1)..]);
         }
 
+        // Capture the actual decoded parameters before validation so a rejected
+        // link still explains what it supplied. The same dictionary drives parsing.
+        if (report is not null)
+        {
+            report.Parameters = parameters;
+            report.InputProject = parameters.GetValueOrDefault("project_path") ?? parameters.GetValueOrDefault("projectDir") ?? parameters.GetValueOrDefault("project");
+            report.InputFile = parameters.GetValueOrDefault("file") ?? parameters.GetValueOrDefault("url");
+            report.Connection = parameters.GetValueOrDefault("connect_to") is { } mode
+                ? (mode.Length == 0 ? "Invalid (empty)" : mode.ToUpperInvariant())
+                : parameters.ContainsKey("project_path") || parameters.ContainsKey("project") ||
+                    parameters.ContainsKey("ssh_host") || parameters.ContainsKey("sshHost")
+                    ? "Not specified (remote link)" : "Windows";
+        }
+
         int? line = null;
         if (parameters.TryGetValue("line", out string? value))
         {
             if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) || number < 1)
                 throw new IntegrationException("The 'line' parameter must be a positive integer.");
             line = number;
+            if (report is not null)
+                report.Line = line;
         }
 
         string? file = parameters.GetValueOrDefault("file");

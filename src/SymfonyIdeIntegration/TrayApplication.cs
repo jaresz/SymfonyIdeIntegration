@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Reflection;
 
 namespace SymfonyIdeIntegration;
@@ -10,9 +8,13 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly NotifyIcon trayIcon;
     private readonly ToolStripMenuItem vsCodeItem = new("Visual Studio Code");
     private readonly ToolStripMenuItem phpStormItem = new("PhpStorm");
-    private readonly System.Threading.Timer logCleanup;
+    private readonly ToolStripSeparator quickLaunchSeparator = new();
+    private readonly List<ToolStripMenuItem> quickLaunchItems = [];
+    private readonly InvocationChannel invocations;
+    private LastInvocationDialog? invocationDialog;
     private UserSettings settings;
     private bool settingsDamaged;
+    private bool disposed;
     private Icon? currentIcon;
 
     internal TrayApplication()
@@ -20,11 +22,12 @@ internal sealed class TrayApplication : ApplicationContext
         settings = UserSettings.Load(out settingsDamaged);
         vsCodeItem.Click += (_, _) => Save(settings with { Editor = Editor.VsCode });
         phpStormItem.Click += (_, _) => Save(settings with { Editor = Editor.PhpStorm });
-        menu.Items.AddRange([vsCodeItem, phpStormItem, new ToolStripSeparator(),
+        menu.Items.AddRange([quickLaunchSeparator, vsCodeItem, phpStormItem, new ToolStripSeparator(),
             new ToolStripMenuItem("Settings…", null, (_, _) => OpenSettings()),
-            new ToolStripMenuItem("Logs", null, (_, _) => OpenLogs()),
+            new ToolStripMenuItem("Last invocation…", null, (_, _) => OpenLastInvocation()),
             new ToolStripMenuItem("About…", null, (_, _) => ShowAbout()),
             new ToolStripMenuItem("Exit", null, (_, _) => ExitThread())]);
+        menu.Opening += (_, _) => RefreshQuickLaunch();
         trayIcon = new NotifyIcon
         {
             ContextMenuStrip = menu
@@ -36,7 +39,34 @@ internal sealed class TrayApplication : ApplicationContext
         };
         UpdateMenu();
         trayIcon.Visible = true;
-        logCleanup = new(_ => IntegrationLog.Update(), null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
+        invocations = new InvocationChannel();
+    }
+
+    private void RefreshQuickLaunch()
+    {
+        // Re-read Quick Launch before either mouse button opens the menu, so
+        // added, renamed and removed shortcuts appear without restarting the tray.
+        ClearQuickLaunch();
+        int index = menu.Items.IndexOf(quickLaunchSeparator);
+        foreach (ToolStripMenuItem item in QuickLaunch.CreateItems())
+        {
+            menu.Items.Insert(index++, item);
+            quickLaunchItems.Add(item);
+        }
+        quickLaunchSeparator.Available = quickLaunchItems.Count > 0;
+    }
+
+    private void ClearQuickLaunch()
+    {
+        foreach (ToolStripMenuItem item in quickLaunchItems)
+        {
+            menu.Items.Remove(item);
+            // The shell icons are our bitmaps; disposing a menu item does not own them.
+            Image? image = item.Image;
+            item.Dispose();
+            image?.Dispose();
+        }
+        quickLaunchItems.Clear();
     }
 
     private void UpdateMenu()
@@ -50,27 +80,21 @@ internal sealed class TrayApplication : ApplicationContext
         currentIcon = updatedIcon;
     }
 
-    private static void OpenLogs()
+    private void OpenLastInvocation()
     {
-        const string title = "Symfony IDE Integration";
-        string path = IntegrationLog.FilePath;
-        if (!File.Exists(path))
+        // Keep a single modeless window so the tray remains usable and the
+        // window can display subsequent requests without being reopened.
+        if (invocationDialog is { IsDisposed: false })
         {
-            MessageBox.Show("No logs are available yet.", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (invocationDialog.WindowState == FormWindowState.Minimized)
+                invocationDialog.WindowState = FormWindowState.Normal;
+            invocationDialog.Activate();
             return;
         }
-
-        var startInfo = new ProcessStartInfo("notepad.exe") { UseShellExecute = false };
-        startInfo.ArgumentList.Add(path);
-        try
-        {
-            using var notepad = Process.Start(startInfo);
-        }
-        catch (Win32Exception)
-        {
-            MessageBox.Show($"Could not open the log file in Notepad.\n\n{path}",
-                title, MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        invocationDialog = new LastInvocationDialog(invocations);
+        invocationDialog.FormClosed += (_, _) => invocationDialog = null;
+        invocationDialog.Show();
+        invocationDialog.Activate();
     }
 
     private static void ShowAbout()
@@ -99,8 +123,7 @@ internal sealed class TrayApplication : ApplicationContext
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            IntegrationLog.Update($"Could not save settings: {error.GetType().Name}");
-            MessageBox.Show("Could not save settings. See integration.log in %LOCALAPPDATA%\\SymfonyIdeIntegration for details.",
+            MessageBox.Show($"Could not save settings.\n\n{error.Message}",
                 "Symfony IDE Integration", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
         }
@@ -108,12 +131,17 @@ internal sealed class TrayApplication : ApplicationContext
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        // WinForms disposes the application context when its message loop ends;
+        // Program's using statement also disposes it. Release owned resources once.
+        if (disposing && !disposed)
         {
-            logCleanup.Dispose();
+            disposed = true;
+            invocationDialog?.Dispose();
+            invocations.Dispose();
             trayIcon.Visible = false;
             trayIcon.Dispose();
             currentIcon?.Dispose();
+            ClearQuickLaunch();
             menu.Dispose();
         }
         base.Dispose(disposing);
